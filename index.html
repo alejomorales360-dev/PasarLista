@@ -250,7 +250,6 @@ input,select{font-size:16px}
    inyectarPuntajeBase (extras) · cerrarEventoActivo
    ═══════════════════════════════════════════════════════════ */
 var GAS_URL = window.GAS_URL || 'https://script.google.com/macros/s/AKfycby9g8g_ShXZmLTMSWafId1-iW-cIGQ5wiFZCXT6il6NHckCx4jYV1Xl-VESS3vFXk4VOA/exec';
-var AK = 'so1admin2026';
 var READ = {obtenerEventoActivo:1, obtenerTodosLosSocios:1};
 
 function api(fn, arg){
@@ -260,7 +259,7 @@ function api(fn, arg){
       run[fn].apply(run, arg===undefined ? [] : [arg]);
       return;
     }
-    var url = GAS_URL + '?action=' + fn + '&key=' + AK;
+    var url = GAS_URL + '?action=' + fn + '&token=' + encodeURIComponent(S.token||'');
     if(READ[fn]){
       if(arg && typeof arg==='object') Object.keys(arg).forEach(function(k){ url += '&'+k+'='+encodeURIComponent(String(arg[k]||'')); });
     } else if(arg!==undefined){
@@ -268,8 +267,16 @@ function api(fn, arg){
     }
     var ctl = (typeof AbortController!=='undefined') ? new AbortController() : null;
     var to = setTimeout(function(){ if(ctl) ctl.abort(); }, 25000);
-    fetch(url, ctl?{signal:ctl.signal}:{}).then(function(r){ return r.json(); })
-      .then(function(d){ clearTimeout(to); res(d); })
+    /* La contraseña viaja por POST, nunca en la URL */
+    var req = fn==='autenticarUsuario'
+      ? fetch(GAS_URL, {method:'POST', body:JSON.stringify({action:fn, data:arg}), signal:ctl?ctl.signal:undefined})
+      : fetch(url, ctl?{signal:ctl.signal}:{});
+    req.then(function(r){ return r.json(); })
+      .then(function(d){
+        clearTimeout(to);
+        if(d && d.sesionExpirada && S.token){ alert('Tu sesión expiró. Vuelve a ingresar.'); salir(); return; }
+        res(d);
+      })
       .catch(function(e){ clearTimeout(to); rej(e); });
   });
 }
@@ -320,7 +327,7 @@ function doLogin(){
   api('autenticarUsuario',{usuario:u,password:p}).then(function(d){
     b.disabled=false;b.textContent='Ingresar';
     if(!d||!d.ok){ge('lErr').textContent=(d&&d.error)||'Credenciales incorrectas';return;}
-    S={user:u,rol:d.rol,tipo:d.tipo||'',nombre:d.nombreMostrar||u};
+    S={user:u,rol:d.rol,tipo:d.tipo||'',nombre:d.nombreMostrar||u,token:d.token||''};
     try{sessionStorage.setItem('so1pl_ses',JSON.stringify(S));}catch(e){}
     entrar();
   }).catch(function(){b.disabled=false;b.textContent='Ingresar';ge('lErr').textContent='Error de conexión';});
